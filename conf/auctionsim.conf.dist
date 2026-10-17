@@ -4,7 +4,7 @@
 # update. When it warns, copy the new keys from the refreshed auctionsim.conf.dist
 # (kept current in etc/modules/) into your auctionsim.conf. The module never edits
 # auctionsim.conf itself; missing keys fall back to built-in defaults meanwhile.
-AuctionSim.ConfigVersion = 3
+AuctionSim.ConfigVersion = 4
 
 # Enable or disable the entire module
 AuctionSim.Enabled = 0
@@ -98,3 +98,468 @@ AuctionSim.KeyPercent           = GREY: 0.1, WHITE: 0.1, GREEN: 0.1, BLUE: 0.1, 
 AuctionSim.PermanentPercent     = GREY: 0.1, WHITE: 0.1, GREEN: 0.1, BLUE: 0.1, PURPLE: 0.1, ORANGE: 0.1, YELLOW: 0.1
 AuctionSim.MiscPercent          = GREY: 0.1, WHITE: 0.1, GREEN: 0.1, BLUE: 0.1, PURPLE: 0.1, ORANGE: 0.1, YELLOW: 0.1
 AuctionSim.GlyphPercent         = GREY: 0.1, WHITE: 0.1, GREEN: 0.1, BLUE: 0.1, PURPLE: 0.1, ORANGE: 0.1, YELLOW: 0.1
+
+# ---- Configurable economy ----------------------------------------------------
+# Independent of AuctionSim.Mode (Replay/Market). HISTORICAL preserves the existing
+# price source. CUSTOM uses vendor SellPrice (what a merchant PAYS THE PLAYER),
+# never BuyPrice. HYBRID buying retains historical willingness plus custom caps.
+AuctionSim.Pricing.BuyMode = CUSTOM
+AuctionSim.Pricing.SellMode = CUSTOM
+
+# Default unit price = this configurable multiplier x item_template.SellPrice.
+# Change 3.0 below to any nonnegative multiplier you want (e.g. 2.0 or 5.0).
+# Both sides are separate. Sell values become new listing buyouts; buy values are
+# maximum purchase prices. No item database copy/export is required.
+AuctionSim.Pricing.Buy.Default = 3.0
+AuctionSim.Pricing.Sell.Default = 3.0
+
+# Optional class multipliers override Default. Uncomment only classes you need.
+# Valid names: Consumable, Container, Weapon, Gem, Armor, Reagent, Projectile,
+# TradeGoods, Generic, Recipe, Money, Quiver, Quest, Key, Permanent, Misc, Glyph.
+# AuctionSim.Pricing.Buy.TradeGoods = 3.0
+# AuctionSim.Pricing.Sell.TradeGoods = 3.0
+
+# Subclasses: comma-separated ClassID:SubclassID:Multiplier (numeric WoW IDs).
+# Example: 7:0:5.0 sets Trade Goods / Trade Goods to five times vendor SellPrice.
+AuctionSim.Pricing.Buy.SubclassMultipliers = ""
+AuctionSim.Pricing.Sell.SubclassMultipliers = ""
+
+# Item multipliers: comma-separated ItemID:Multiplier; e.g. "6522:20.0".
+# Optional per-item multipliers; the fixed-price starter list below takes priority.
+AuctionSim.Pricing.Buy.ItemOverrides = ""
+AuctionSim.Pricing.Sell.ItemOverrides = ""
+
+# Absolute copper PER ITEM, not per stack: e.g. "6522:10000,2447:500".
+# Buy.FixedPrices = what bots will pay when PLAYERS sell an item on the AH.
+# Sell.FixedPrices = what bots charge for auctions the BOTS create.
+# An item in either list uses that price instead of its default multiplier.
+# These compact lists also override matching per-item FixedPrice.<ID> rows below.
+# Items absent from both fixed-price forms fall back to multiplier rules above.
+# Fixed > item multiplier > subclass > class > Default. Fixed 0 disables the item
+# on that custom side. Selling's vendor floor still applies to positive overrides.
+AuctionSim.Pricing.Buy.FixedPrices = ""
+AuctionSim.Pricing.Sell.FixedPrices = ""
+
+# ---- Editable starter item prices --------------------------------------------
+# Suggested small-server prices, not historical AH market quotes. Copper PER ITEM.
+# Buy = maximum bots pay PLAYERS; Sell = what bots charge on their OWN listings.
+# A stack scales by its item count. 100 copper = 1 silver; 10000 copper = 1 gold.
+# These fixed rows take priority over Default/category/item multipliers. Change the
+# number next to an item to tune it. Set BOTH rows to DEFAULT to restore that
+# item to multiplier pricing (unless the compact list overrides it). For an item
+# with SellPrice zero, DEFAULT means SKIP unless you configure a historical
+# fallback. Fixed 0 disables the custom side.
+# The original vendor-stock buying safeguards still apply to player auctions.
+# Only items already eligible in Replay/Market data are stocked; prices add no stock.
+# Item names, IDs and vendor values checked against AzerothCore item_template.sql.
+# Most materials use 3x vendor buying / 4x vendor listing, with a small 1s/1s50c
+# minimum. Cloth/fishing premiums and zero-vendor enchanting prices are hand-set.
+# Changing Default affects unlisted items; these fixed entries remain unchanged.
+
+# Cloth / tailoring and first aid
+# 2589 - Linen Cloth | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2589 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2589 = 150
+
+# 2592 - Wool Cloth | bots buy: 3s; bots sell: 4s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2592 = 300
+AuctionSim.Pricing.Sell.FixedPrice.2592 = 450
+
+# 4306 - Silk Cloth | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.4306 = 750
+AuctionSim.Pricing.Sell.FixedPrice.4306 = 1000
+
+# 4338 - Mageweave Cloth | bots buy: 12s 50c; bots sell: 15s
+AuctionSim.Pricing.Buy.FixedPrice.4338 = 1250
+AuctionSim.Pricing.Sell.FixedPrice.4338 = 1500
+
+# 14047 - Runecloth | bots buy: 20s; bots sell: 25s
+AuctionSim.Pricing.Buy.FixedPrice.14047 = 2000
+AuctionSim.Pricing.Sell.FixedPrice.14047 = 2500
+
+# 21877 - Netherweave Cloth | bots buy: 40s; bots sell: 50s
+AuctionSim.Pricing.Buy.FixedPrice.21877 = 4000
+AuctionSim.Pricing.Sell.FixedPrice.21877 = 5000
+
+# 33470 - Frostweave Cloth | bots buy: 60s; bots sell: 75s
+AuctionSim.Pricing.Buy.FixedPrice.33470 = 6000
+AuctionSim.Pricing.Sell.FixedPrice.33470 = 7500
+
+# Mining / ore and stone
+# 2770 - Copper Ore | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2770 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2770 = 150
+
+# 2771 - Tin Ore | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2771 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2771 = 150
+
+# 2775 - Silver Ore | bots buy: 2s 25c; bots sell: 3s
+AuctionSim.Pricing.Buy.FixedPrice.2775 = 225
+AuctionSim.Pricing.Sell.FixedPrice.2775 = 300
+
+# 2772 - Iron Ore | bots buy: 4s 50c; bots sell: 6s
+AuctionSim.Pricing.Buy.FixedPrice.2772 = 450
+AuctionSim.Pricing.Sell.FixedPrice.2772 = 600
+
+# 2776 - Gold Ore | bots buy: 15s; bots sell: 20s
+AuctionSim.Pricing.Buy.FixedPrice.2776 = 1500
+AuctionSim.Pricing.Sell.FixedPrice.2776 = 2000
+
+# 3858 - Mithril Ore | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.3858 = 750
+AuctionSim.Pricing.Sell.FixedPrice.3858 = 1000
+
+# 7911 - Truesilver Ore | bots buy: 15s; bots sell: 20s
+AuctionSim.Pricing.Buy.FixedPrice.7911 = 1500
+AuctionSim.Pricing.Sell.FixedPrice.7911 = 2000
+
+# 10620 - Thorium Ore | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.10620 = 750
+AuctionSim.Pricing.Sell.FixedPrice.10620 = 1000
+
+# 23424 - Fel Iron Ore | bots buy: 30s; bots sell: 40s
+AuctionSim.Pricing.Buy.FixedPrice.23424 = 3000
+AuctionSim.Pricing.Sell.FixedPrice.23424 = 4000
+
+# 23425 - Adamantite Ore | bots buy: 45s; bots sell: 60s
+AuctionSim.Pricing.Buy.FixedPrice.23425 = 4500
+AuctionSim.Pricing.Sell.FixedPrice.23425 = 6000
+
+# 36909 - Cobalt Ore | bots buy: 30s; bots sell: 40s
+AuctionSim.Pricing.Buy.FixedPrice.36909 = 3000
+AuctionSim.Pricing.Sell.FixedPrice.36909 = 4000
+
+# 36912 - Saronite Ore | bots buy: 75s; bots sell: 1g
+AuctionSim.Pricing.Buy.FixedPrice.36912 = 7500
+AuctionSim.Pricing.Sell.FixedPrice.36912 = 10000
+
+# 36910 - Titanium Ore | bots buy: 37s 50c; bots sell: 50s
+AuctionSim.Pricing.Buy.FixedPrice.36910 = 3750
+AuctionSim.Pricing.Sell.FixedPrice.36910 = 5000
+
+# 2835 - Rough Stone | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2835 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2835 = 150
+
+# 2836 - Coarse Stone | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2836 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2836 = 150
+
+# 2838 - Heavy Stone | bots buy: 1s 80c; bots sell: 2s 40c
+AuctionSim.Pricing.Buy.FixedPrice.2838 = 180
+AuctionSim.Pricing.Sell.FixedPrice.2838 = 240
+
+# 7912 - Solid Stone | bots buy: 3s; bots sell: 4s
+AuctionSim.Pricing.Buy.FixedPrice.7912 = 300
+AuctionSim.Pricing.Sell.FixedPrice.7912 = 400
+
+# 12365 - Dense Stone | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.12365 = 750
+AuctionSim.Pricing.Sell.FixedPrice.12365 = 1000
+
+# Herbalism / alchemy and inscription
+# 2447 - Peacebloom | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2447 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2447 = 150
+
+# 765 - Silverleaf | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.765 = 100
+AuctionSim.Pricing.Sell.FixedPrice.765 = 150
+
+# 2449 - Earthroot | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2449 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2449 = 150
+
+# 785 - Mageroyal | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.785 = 100
+AuctionSim.Pricing.Sell.FixedPrice.785 = 150
+
+# 2450 - Briarthorn | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2450 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2450 = 150
+
+# 3820 - Stranglekelp | bots buy: 3s; bots sell: 4s
+AuctionSim.Pricing.Buy.FixedPrice.3820 = 300
+AuctionSim.Pricing.Sell.FixedPrice.3820 = 400
+
+# 2453 - Bruiseweed | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2453 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2453 = 150
+
+# 3355 - Wild Steelbloom | bots buy: 1s 50c; bots sell: 2s
+AuctionSim.Pricing.Buy.FixedPrice.3355 = 150
+AuctionSim.Pricing.Sell.FixedPrice.3355 = 200
+
+# 3356 - Kingsblood | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.3356 = 100
+AuctionSim.Pricing.Sell.FixedPrice.3356 = 150
+
+# 3357 - Liferoot | bots buy: 2s 25c; bots sell: 3s
+AuctionSim.Pricing.Buy.FixedPrice.3357 = 225
+AuctionSim.Pricing.Sell.FixedPrice.3357 = 300
+
+# 3818 - Fadeleaf | bots buy: 3s 75c; bots sell: 5s
+AuctionSim.Pricing.Buy.FixedPrice.3818 = 375
+AuctionSim.Pricing.Sell.FixedPrice.3818 = 500
+
+# 3821 - Goldthorn | bots buy: 4s 50c; bots sell: 6s
+AuctionSim.Pricing.Buy.FixedPrice.3821 = 450
+AuctionSim.Pricing.Sell.FixedPrice.3821 = 600
+
+# 3358 - Khadgar's Whisker | bots buy: 5s 25c; bots sell: 7s
+AuctionSim.Pricing.Buy.FixedPrice.3358 = 525
+AuctionSim.Pricing.Sell.FixedPrice.3358 = 700
+
+# 8838 - Sungrass | bots buy: 1s 80c; bots sell: 2s 40c
+AuctionSim.Pricing.Buy.FixedPrice.8838 = 180
+AuctionSim.Pricing.Sell.FixedPrice.8838 = 240
+
+# 8839 - Blindweed | bots buy: 11s 25c; bots sell: 15s
+AuctionSim.Pricing.Buy.FixedPrice.8839 = 1125
+AuctionSim.Pricing.Sell.FixedPrice.8839 = 1500
+
+# 8846 - Gromsblood | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.8846 = 750
+AuctionSim.Pricing.Sell.FixedPrice.8846 = 1000
+
+# 13464 - Golden Sansam | bots buy: 3s; bots sell: 4s
+AuctionSim.Pricing.Buy.FixedPrice.13464 = 300
+AuctionSim.Pricing.Sell.FixedPrice.13464 = 400
+
+# 13463 - Dreamfoil | bots buy: 3s; bots sell: 4s
+AuctionSim.Pricing.Buy.FixedPrice.13463 = 300
+AuctionSim.Pricing.Sell.FixedPrice.13463 = 400
+
+# 13465 - Mountain Silversage | bots buy: 4s 50c; bots sell: 6s
+AuctionSim.Pricing.Buy.FixedPrice.13465 = 450
+AuctionSim.Pricing.Sell.FixedPrice.13465 = 600
+
+# 13466 - Plaguebloom | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.13466 = 750
+AuctionSim.Pricing.Sell.FixedPrice.13466 = 1000
+
+# 22785 - Felweed | bots buy: 15s; bots sell: 20s
+AuctionSim.Pricing.Buy.FixedPrice.22785 = 1500
+AuctionSim.Pricing.Sell.FixedPrice.22785 = 2000
+
+# 22786 - Dreaming Glory | bots buy: 15s; bots sell: 20s
+AuctionSim.Pricing.Buy.FixedPrice.22786 = 1500
+AuctionSim.Pricing.Sell.FixedPrice.22786 = 2000
+
+# 22787 - Ragveil | bots buy: 18s; bots sell: 24s
+AuctionSim.Pricing.Buy.FixedPrice.22787 = 1800
+AuctionSim.Pricing.Sell.FixedPrice.22787 = 2400
+
+# 22789 - Terocone | bots buy: 15s; bots sell: 20s
+AuctionSim.Pricing.Buy.FixedPrice.22789 = 1500
+AuctionSim.Pricing.Sell.FixedPrice.22789 = 2000
+
+# 36901 - Goldclover | bots buy: 22s 50c; bots sell: 30s
+AuctionSim.Pricing.Buy.FixedPrice.36901 = 2250
+AuctionSim.Pricing.Sell.FixedPrice.36901 = 3000
+
+# 36907 - Talandra's Rose | bots buy: 22s 50c; bots sell: 30s
+AuctionSim.Pricing.Buy.FixedPrice.36907 = 2250
+AuctionSim.Pricing.Sell.FixedPrice.36907 = 3000
+
+# 36904 - Tiger Lily | bots buy: 22s 50c; bots sell: 30s
+AuctionSim.Pricing.Buy.FixedPrice.36904 = 2250
+AuctionSim.Pricing.Sell.FixedPrice.36904 = 3000
+
+# 36903 - Adder's Tongue | bots buy: 37s 50c; bots sell: 50s
+AuctionSim.Pricing.Buy.FixedPrice.36903 = 3750
+AuctionSim.Pricing.Sell.FixedPrice.36903 = 5000
+
+# 36905 - Lichbloom | bots buy: 60s; bots sell: 80s
+AuctionSim.Pricing.Buy.FixedPrice.36905 = 6000
+AuctionSim.Pricing.Sell.FixedPrice.36905 = 8000
+
+# 36906 - Icethorn | bots buy: 60s; bots sell: 80s
+AuctionSim.Pricing.Buy.FixedPrice.36906 = 6000
+AuctionSim.Pricing.Sell.FixedPrice.36906 = 8000
+
+# 36908 - Frost Lotus | bots buy: 3g; bots sell: 4g
+AuctionSim.Pricing.Buy.FixedPrice.36908 = 30000
+AuctionSim.Pricing.Sell.FixedPrice.36908 = 40000
+
+# Skinning / leatherworking
+# 2318 - Light Leather | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.2318 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2318 = 150
+
+# 2319 - Medium Leather | bots buy: 1s 50c; bots sell: 2s
+AuctionSim.Pricing.Buy.FixedPrice.2319 = 150
+AuctionSim.Pricing.Sell.FixedPrice.2319 = 200
+
+# 4234 - Heavy Leather | bots buy: 4s 50c; bots sell: 6s
+AuctionSim.Pricing.Buy.FixedPrice.4234 = 450
+AuctionSim.Pricing.Sell.FixedPrice.4234 = 600
+
+# 4304 - Thick Leather | bots buy: 9s; bots sell: 12s
+AuctionSim.Pricing.Buy.FixedPrice.4304 = 900
+AuctionSim.Pricing.Sell.FixedPrice.4304 = 1200
+
+# 8170 - Rugged Leather | bots buy: 15s; bots sell: 20s
+AuctionSim.Pricing.Buy.FixedPrice.8170 = 1500
+AuctionSim.Pricing.Sell.FixedPrice.8170 = 2000
+
+# 21887 - Knothide Leather | bots buy: 37s 50c; bots sell: 50s
+AuctionSim.Pricing.Buy.FixedPrice.21887 = 3750
+AuctionSim.Pricing.Sell.FixedPrice.21887 = 5000
+
+# 33568 - Borean Leather | bots buy: 67s 50c; bots sell: 90s
+AuctionSim.Pricing.Buy.FixedPrice.33568 = 6750
+AuctionSim.Pricing.Sell.FixedPrice.33568 = 9000
+
+# 44128 - Arctic Fur | bots buy: 9g; bots sell: 12g
+AuctionSim.Pricing.Buy.FixedPrice.44128 = 90000
+AuctionSim.Pricing.Sell.FixedPrice.44128 = 120000
+
+# Enchanting / dusts and shards
+# 10940 - Strange Dust | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.10940 = 100
+AuctionSim.Pricing.Sell.FixedPrice.10940 = 150
+
+# 11083 - Soul Dust | bots buy: 3s; bots sell: 4s 50c
+AuctionSim.Pricing.Buy.FixedPrice.11083 = 300
+AuctionSim.Pricing.Sell.FixedPrice.11083 = 450
+
+# 11137 - Vision Dust | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.11137 = 750
+AuctionSim.Pricing.Sell.FixedPrice.11137 = 1000
+
+# 11176 - Dream Dust | bots buy: 15s; bots sell: 20s
+AuctionSim.Pricing.Buy.FixedPrice.11176 = 1500
+AuctionSim.Pricing.Sell.FixedPrice.11176 = 2000
+
+# 16204 - Illusion Dust | bots buy: 30s; bots sell: 40s
+AuctionSim.Pricing.Buy.FixedPrice.16204 = 3000
+AuctionSim.Pricing.Sell.FixedPrice.16204 = 4000
+
+# 22445 - Arcane Dust | bots buy: 50s; bots sell: 65s
+AuctionSim.Pricing.Buy.FixedPrice.22445 = 5000
+AuctionSim.Pricing.Sell.FixedPrice.22445 = 6500
+
+# 34054 - Infinite Dust | bots buy: 75s; bots sell: 1g
+AuctionSim.Pricing.Buy.FixedPrice.34054 = 7500
+AuctionSim.Pricing.Sell.FixedPrice.34054 = 10000
+
+# 14343 - Small Brilliant Shard | bots buy: 50s; bots sell: 65s
+AuctionSim.Pricing.Buy.FixedPrice.14343 = 5000
+AuctionSim.Pricing.Sell.FixedPrice.14343 = 6500
+
+# 14344 - Large Brilliant Shard | bots buy: 1g 50s; bots sell: 2g
+AuctionSim.Pricing.Buy.FixedPrice.14344 = 15000
+AuctionSim.Pricing.Sell.FixedPrice.14344 = 20000
+
+# 22449 - Large Prismatic Shard | bots buy: 3g; bots sell: 4g
+AuctionSim.Pricing.Buy.FixedPrice.22449 = 30000
+AuctionSim.Pricing.Sell.FixedPrice.22449 = 40000
+
+# 34052 - Dream Shard | bots buy: 4g; bots sell: 5g 50s
+AuctionSim.Pricing.Buy.FixedPrice.34052 = 40000
+AuctionSim.Pricing.Sell.FixedPrice.34052 = 55000
+
+# 34057 - Abyss Crystal | bots buy: 10g; bots sell: 15g
+AuctionSim.Pricing.Buy.FixedPrice.34057 = 100000
+AuctionSim.Pricing.Sell.FixedPrice.34057 = 150000
+
+# Alchemy / useful player consumables
+# 118 - Minor Healing Potion | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.118 = 100
+AuctionSim.Pricing.Sell.FixedPrice.118 = 150
+
+# 858 - Lesser Healing Potion | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.858 = 100
+AuctionSim.Pricing.Sell.FixedPrice.858 = 150
+
+# 929 - Healing Potion | bots buy: 2s 25c; bots sell: 3s
+AuctionSim.Pricing.Buy.FixedPrice.929 = 225
+AuctionSim.Pricing.Sell.FixedPrice.929 = 300
+
+# 1710 - Greater Healing Potion | bots buy: 3s 75c; bots sell: 5s
+AuctionSim.Pricing.Buy.FixedPrice.1710 = 375
+AuctionSim.Pricing.Sell.FixedPrice.1710 = 500
+
+# 3928 - Superior Healing Potion | bots buy: 7s 50c; bots sell: 10s
+AuctionSim.Pricing.Buy.FixedPrice.3928 = 750
+AuctionSim.Pricing.Sell.FixedPrice.3928 = 1000
+
+# 13446 - Major Healing Potion | bots buy: 30s; bots sell: 40s
+AuctionSim.Pricing.Buy.FixedPrice.13446 = 3000
+AuctionSim.Pricing.Sell.FixedPrice.13446 = 4000
+
+# 22829 - Super Healing Potion | bots buy: 1g 50s; bots sell: 2g
+AuctionSim.Pricing.Buy.FixedPrice.22829 = 15000
+AuctionSim.Pricing.Sell.FixedPrice.22829 = 20000
+
+# 33447 - Runic Healing Potion | bots buy: 1g 80s; bots sell: 2g 40s
+AuctionSim.Pricing.Buy.FixedPrice.33447 = 18000
+AuctionSim.Pricing.Sell.FixedPrice.33447 = 24000
+
+# 3385 - Lesser Mana Potion | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.3385 = 100
+AuctionSim.Pricing.Sell.FixedPrice.3385 = 150
+
+# 3827 - Mana Potion | bots buy: 3s 60c; bots sell: 4s 80c
+AuctionSim.Pricing.Buy.FixedPrice.3827 = 360
+AuctionSim.Pricing.Sell.FixedPrice.3827 = 480
+
+# 6149 - Greater Mana Potion | bots buy: 9s; bots sell: 12s
+AuctionSim.Pricing.Buy.FixedPrice.6149 = 900
+AuctionSim.Pricing.Sell.FixedPrice.6149 = 1200
+
+# 13443 - Superior Mana Potion | bots buy: 12s; bots sell: 16s
+AuctionSim.Pricing.Buy.FixedPrice.13443 = 1200
+AuctionSim.Pricing.Sell.FixedPrice.13443 = 1600
+
+# 13444 - Major Mana Potion | bots buy: 45s; bots sell: 60s
+AuctionSim.Pricing.Buy.FixedPrice.13444 = 4500
+AuctionSim.Pricing.Sell.FixedPrice.13444 = 6000
+
+# 22832 - Super Mana Potion | bots buy: 1g 50s; bots sell: 2g
+AuctionSim.Pricing.Buy.FixedPrice.22832 = 15000
+AuctionSim.Pricing.Sell.FixedPrice.22832 = 20000
+
+# 33448 - Runic Mana Potion | bots buy: 1g 80s; bots sell: 2g 40s
+AuctionSim.Pricing.Buy.FixedPrice.33448 = 18000
+AuctionSim.Pricing.Sell.FixedPrice.33448 = 24000
+
+# Cooking / fishing exceptions
+# 6522 - Deviate Fish | bots buy: 5s; bots sell: 7s 50c
+AuctionSim.Pricing.Buy.FixedPrice.6522 = 500
+AuctionSim.Pricing.Sell.FixedPrice.6522 = 750
+
+# 6358 - Oily Blackmouth | bots buy: 1s; bots sell: 1s 50c
+AuctionSim.Pricing.Buy.FixedPrice.6358 = 100
+AuctionSim.Pricing.Sell.FixedPrice.6358 = 150
+
+# 6359 - Firefin Snapper | bots buy: 2s; bots sell: 3s
+AuctionSim.Pricing.Buy.FixedPrice.6359 = 200
+AuctionSim.Pricing.Sell.FixedPrice.6359 = 300
+
+# For SellPrice=0 without a fixed price: SKIP (default), or HISTORICAL fallback.
+AuctionSim.Pricing.Buy.ZeroVendorPolicy = SKIP
+AuctionSim.Pricing.Sell.ZeroVendorPolicy = SKIP
+
+# Percent jitter around custom sell prices. 0 keeps the initial price list exact.
+# Range 0..100. The floor applies to custom buyouts after variation and to starting bids.
+AuctionSim.Pricing.Sell.VariationPercent = 0
+AuctionSim.Pricing.Sell.MinimumVendorMultiplier = 1.0
+
+# Quantity per item ID and gold reserved per UTC day; 0 = unlimited.
+# Shared across both houses, regardless of price mode. Applied at execution so
+# queued actions cannot exceed the budget together. Bids reserve the full amount;
+# later bids on the same auction charge only the increase and count quantity once.
+# Outbid/expired reservations are not refunded. Retained across pricing reloads,
+# but reset on worldserver restart. These are conservative session safeguards.
+AuctionSim.Pricing.Buy.DailyItemLimit = 0
+AuctionSim.Pricing.Buy.DailyGoldBudget = 0
+
+# 0 bypasses custom PRICE caps for bids; daily limits and original guards remain.
+AuctionSim.Pricing.Buy.ApplyToBids = 1
+
+# GM/console: auctionsim pricing reload | auctionsim pricing show <ItemID>
+# Reload drops pending purchases; existing auctions keep their posted prices.
+# Changing pricing sources does not change auction supply or item eligibility.

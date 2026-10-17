@@ -12,7 +12,7 @@
 // renames a key. Stamped into the .dist as "AuctionSim.ConfigVersion"; a GM whose
 // auctionsim.conf carries an older value is warned (the module keeps running on
 // built-in defaults for the missing keys -- it never edits auctionsim.conf).
-#define AUCTIONSIM_CONFIG_VERSION 3u
+#define AUCTIONSIM_CONFIG_VERSION 4u
 
 // Data-file schema version. Bump whenever the auctionsim.dat row layout changes
 // (see data/compile-data.cpp). compile-data stamps it as the file's first line

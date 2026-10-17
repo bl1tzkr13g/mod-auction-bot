@@ -1,6 +1,8 @@
 #include "ASConfig.h"
 #include <array>
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -67,6 +69,7 @@ ASConfig::ASConfig(std::string const& filepath, bool& outLoaded)
     this->maxItemLevel = sConfigMgr->GetOption<uint32>("AuctionSim.MaxItemLevel", 0);
 
     LoadReplayBidding();
+    pricingConfigValid = LoadPricing();
 
     std::string mode = sConfigMgr->GetOption<std::string>("AuctionSim.Mode", "Replay");
     if (!ParseMode(mode, this->marketMode))
@@ -519,4 +522,77 @@ void ASConfig::UnpackQualityString(std::string_view qualityString, int itemClass
     }
 
     this->ItemSelectionMask[itemClass][ITEM_QUALITY_HEIRLOOM] = 0.0f;
+}
+
+// Parse into a candidate so a malformed reload never partially replaces live rules.
+bool ASConfig::LoadPricing()
+{
+    EconomyPricing::Settings next;
+    auto fail = [](std::string const& key) {
+        LOG_ERROR("module", "AuctionSim: invalid pricing setting {}; keeping previous pricing rules", key);
+        return false;
+    };
+    auto text = [](std::string const& key, std::string const& fallback = "") {
+        return sConfigMgr->GetOption<std::string>(key, fallback, false);
+    };
+    if (!EconomyPricing::ParseMode(text("AuctionSim.Pricing.BuyMode", "CUSTOM"), next.buyMode))
+        return fail("AuctionSim.Pricing.BuyMode");
+    if (!EconomyPricing::ParseMode(text("AuctionSim.Pricing.SellMode", "CUSTOM"), next.sellMode, false))
+        return fail("AuctionSim.Pricing.SellMode");
+    auto number = [&](std::string const& key, double fallback, double& result) {
+        float value;
+        if (!ASParse::Float(text(key, std::to_string(fallback)), value) || !std::isfinite(value) || value < 0)
+            return fail(key);
+        result = value;
+        return true;
+    };
+    auto loadRules = [&](std::string const& side, EconomyPricing::Rules& rules) {
+        std::string prefix = "AuctionSim.Pricing." + side + ".";
+        if (!number(prefix + "Default", 3.0, rules.multiplier)) return false;
+        for (auto const& cls : kItemClassConfigKeys)
+        {
+            std::string name = cls.configKey;
+            name = name.substr(11, name.size() - 11 - 7); // strip AuctionSim. and Percent
+            std::string value = text(prefix + name);
+            if (!value.empty())
+            {
+                double multiplier;
+                if (!number(prefix + name, 3.0, multiplier)) return false;
+                rules.classes[cls.itemClass] = multiplier;
+            }
+        }
+        if (!EconomyPricing::ParseSubclasses(text(prefix + "SubclassMultipliers"), rules.subclasses))
+            return fail(prefix + "SubclassMultipliers");
+        if (!EconomyPricing::ParseMultipliers(text(prefix + "ItemOverrides"), rules.items))
+            return fail(prefix + "ItemOverrides");
+        if (!EconomyPricing::ParseFixedPrices(text(prefix + "FixedPrices"), rules.fixed))
+            return fail(prefix + "FixedPrices");
+        std::string itemPrefix = prefix + "FixedPrice.";
+        for (std::string const& key : sConfigMgr->GetKeysByString(itemPrefix))
+        {
+            if (key.compare(0, itemPrefix.size(), itemPrefix) != 0) continue;
+            if (!EconomyPricing::AddFixedPriceSetting(key.substr(itemPrefix.size()), text(key), rules))
+                return fail(key);
+        }
+        std::string policy = text(prefix + "ZeroVendorPolicy", "SKIP");
+        std::transform(policy.begin(), policy.end(), policy.begin(), [](unsigned char c) { return std::toupper(c); });
+        if (policy == "HISTORICAL") rules.zeroVendor = EconomyPricing::ZeroVendor::Historical;
+        else if (policy != "SKIP") return fail(prefix + "ZeroVendorPolicy");
+        return true;
+    };
+    if (!loadRules("Buy", next.buy) || !loadRules("Sell", next.sell)) return false;
+    if (!number("AuctionSim.Pricing.Sell.VariationPercent", 0, next.variationPercent) || next.variationPercent > 100)
+        return fail("AuctionSim.Pricing.Sell.VariationPercent");
+    if (!number("AuctionSim.Pricing.Sell.MinimumVendorMultiplier", 1, next.minimumVendorMultiplier)) return false;
+    if (!ASParse::Integer(text("AuctionSim.Pricing.Buy.DailyItemLimit", "0"), next.dailyItemLimit))
+        return fail("AuctionSim.Pricing.Buy.DailyItemLimit");
+    uint64_t gold;
+    if (!ASParse::Integer(text("AuctionSim.Pricing.Buy.DailyGoldBudget", "0"), gold) || gold > UINT64_MAX / 10000)
+        return fail("AuctionSim.Pricing.Buy.DailyGoldBudget");
+    next.dailyCopperBudget = gold * 10000;
+    if (!ParseReplayBidding(text("AuctionSim.Pricing.Buy.ApplyToBids", "1"), next.applyToBids))
+        return fail("AuctionSim.Pricing.Buy.ApplyToBids");
+    pricing = std::move(next);
+    pricingConfigValid = true;
+    return true;
 }

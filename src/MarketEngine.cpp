@@ -133,7 +133,8 @@ namespace Market
         }
     }
 
-    uint32 Engine::PlanBuys(Faction const& fac, double scaleTimesDt, size_t weekday, Rng& rng, std::vector<uint32>& out)
+    uint32 Engine::PlanBuys(Faction const& fac, double scaleTimesDt, size_t weekday, Rng& rng,
+        std::vector<uint32>& out, std::vector<uint32> const* priceReferences)
     {
         size_t const itemCount = fac.items.size();
         if (_rateFaction != &fac || _rateScale != scaleTimesDt || _rateWeekday != weekday ||
@@ -181,7 +182,8 @@ namespace Market
             for (uint32 a = 0; a < arrivals; ++a)
             {
                 double reservation =
-                    ReservationRatio(curve, rng.Uniform(), rng.Uniform()) * static_cast<double>(item.ref);
+                    ReservationRatio(curve, rng.Uniform(), rng.Uniform()) *
+                    (priceReferences && i < priceReferences->size() ? (*priceReferences)[i] : static_cast<double>(item.ref));
                 while (next < state.end && !(_listings[next].flags & Listing::kBuyable))
                 {
                     ++next;

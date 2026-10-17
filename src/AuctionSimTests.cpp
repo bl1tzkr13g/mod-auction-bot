@@ -1275,6 +1275,11 @@ namespace
             {
                 continue;
             }
+            if (config.pricing.sellMode != EconomyPricing::Mode::Historical &&
+                !config.pricing.SellPrice(ASConfig::PricingItem(proto), item.GetMarketPrice()))
+            {
+                continue; // zero-vendor items can now be intentionally unpriced
+            }
 
             if (!AuctionPricing::IsWithinLevelCap(
                     proto->RequiredLevel, proto->ItemLevel, config.maxRequiredLevel, config.maxItemLevel))
@@ -1305,6 +1310,11 @@ namespace
             if (!proto)
             {
                 continue;
+            }
+            if (config.pricing.sellMode != EconomyPricing::Mode::Historical &&
+                !config.pricing.SellPrice(ASConfig::PricingItem(proto), item.GetMarketPrice()))
+            {
+                continue; // zero-vendor items can now be intentionally unpriced
             }
             if (!fallback)
             {

@@ -44,6 +44,10 @@ public:
 
     ChatCommandTable GetCommands() const override
     {
+        static ChatCommandTable pricingSubCommandTable = {
+            {"reload", HandlePricingReloadCommand, SEC_ADMINISTRATOR, Console::Yes},
+            {"show", HandlePricingShowCommand, SEC_ADMINISTRATOR, Console::Yes},
+        };
         static ChatCommandTable marketSubCommandTable = {
             {"status", HandleMarketStatusCommand, SEC_ADMINISTRATOR, Console::Yes},
             {"reload", HandleMarketReloadCommand, SEC_ADMINISTRATOR, Console::Yes},
@@ -52,6 +56,7 @@ public:
         };
         static ChatCommandTable auctionSimSubCommandTable = {
             {"market", marketSubCommandTable},
+            {"pricing", pricingSubCommandTable},
             {"scan", HandleScanAuctionsCommand, SEC_ADMINISTRATOR, Console::Yes},
             {"delete", HandleDeleteAuctionsCommand, SEC_ADMINISTRATOR, Console::Yes},
             {"test", HandleTestCommand, SEC_ADMINISTRATOR, Console::Yes},
@@ -63,6 +68,21 @@ public:
             {"auctionsim", auctionSimSubCommandTable},
         };
         return commandTable;
+    }
+
+    static bool HandlePricingReloadCommand(ChatHandler* handler)
+    {
+        auto sim = AuctionSim::instance();
+        handler->SendSysMessage(sim && sim->ReloadPricing()
+            ? "Pricing reloaded. Pending purchases dropped; existing auctions and daily reservations retained."
+            : "Pricing reload failed; previous pricing rules retained. Check the server log.");
+        return true;
+    }
+    static bool HandlePricingShowCommand(ChatHandler* handler, uint32 itemId)
+    {
+        if (auto sim = AuctionSim::instance())
+            for (auto const& line : sim->DescribePricing(itemId)) handler->SendSysMessage(line);
+        return true;
     }
 
     static bool HandleScanAuctionsCommand(ChatHandler* handler)

@@ -244,7 +244,8 @@ void MarketService::Snapshot(size_t faction, std::vector<Market::Listing>& listi
             listing.flags |= Market::Listing::kBotOwned;
         }
         if (auction->buyout > 0 && auction->owner != _buyerGuid && !_buying.IsQueued(auction->Id) &&
-            !(!botOwned && guard > 0 && listing.perUnit > guard))
+            !(!botOwned && guard > 0 && listing.perUnit > guard) &&
+            _buying.AllowsPrice(auction, auction->buyout))
         {
             listing.flags |= Market::Listing::kBuyable;
         }
@@ -398,7 +399,22 @@ void MarketService::StepHouse(size_t faction)
     // 2. Buyers, queued so their purchases spread over the next 20 minutes.
     _claims.clear();
     time_t const now = GameTime::GetGameTime().count();
-    stats.buyers = engine.PlanBuys(fac, static_cast<double>(_scale) * kStepHours, Weekday(now), _rng, _claims);
+    auto config = _buying.PricingConfig();
+    if (config && config->pricing.buyMode == EconomyPricing::Mode::Custom)
+    {
+        // Keep the learned buyer arrival rate, but value goods using custom unit prices.
+        std::vector<uint32> references;
+        references.reserve(fac.items.size());
+        for (auto const& item : fac.items)
+        {
+            auto proto = sObjectMgr->GetItemTemplate(item.itemId);
+            references.push_back(proto ? config->pricing.buy.Price(ASConfig::PricingItem(proto),
+                static_cast<uint32>(std::clamp<double>(item.ref, 0, EconomyPricing::MaxPrice))) : 0);
+        }
+        stats.buyers = engine.PlanBuys(fac, static_cast<double>(_scale) * kStepHours, Weekday(now), _rng, _claims, &references);
+    }
+    else
+        stats.buyers = engine.PlanBuys(fac, static_cast<double>(_scale) * kStepHours, Weekday(now), _rng, _claims);
     for (uint32 index : _claims)
     {
         Market::Listing const& listing = listings[index];
@@ -460,6 +476,20 @@ uint32 MarketService::CreateListings(
         return 0;
     }
 
+    uint32 unitPrice = order.unitPrice;
+    auto config = _buying.PricingConfig();
+    bool customListing = config && config->pricing.sellMode != EconomyPricing::Mode::Historical;
+    if (customListing)
+    {
+        auto proto = sObjectMgr->GetItemTemplate(itemId);
+        unitPrice = proto ? config->pricing.SellPrice(ASConfig::PricingItem(proto), order.unitPrice,
+            frand(-1.0f, 1.0f)) : 0;
+    }
+    if (customListing && (!unitPrice || !EconomyPricing::StackPrice(unitPrice, order.count)))
+    {
+        order.listings = 0;
+        return 0;
+    }
     uint32 made = 0;
     while (order.listings > 0 && made < budget)
     {
@@ -475,7 +505,7 @@ uint32 MarketService::CreateListings(
         item->SetOwnerGUID(owner);
         CraftedItems::SignIfCrafted(item, owner);  // "<Made by seller>", as a player's craft
         uint32 const count = item->GetCount();
-        uint32 const buyout = static_cast<uint32>(std::min<uint64>(uint64(order.unitPrice) * count, kMaxBuyout));
+        uint32 const buyout = static_cast<uint32>(std::min<uint64>(uint64(unitPrice) * count, kMaxBuyout));
 
         AuctionEntry* auction = new AuctionEntry();
         auction->Id = sObjectMgr->GenerateAuctionID();

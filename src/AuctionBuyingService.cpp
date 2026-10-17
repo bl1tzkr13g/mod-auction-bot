@@ -2,6 +2,9 @@
 #include <algorithm>
 #include <iterator>
 #include "AuctionHouseSearcher.h"
+#include "ASConfig.h"
+#include "ObjectMgr.h"
+#include "MarketData.h"
 #include "AuctionPricing.h"
 #include "Bot.h"
 #include "DatabaseEnv.h"
@@ -62,6 +65,14 @@ void AuctionBuyingService::ConsiderForPurchase(
         return;
     }
 
+    if (!AllowsPrice(auction, auction->buyout)) return;
+    if (_config && _config->pricing.buyMode == EconomyPricing::Mode::Custom)
+    {
+        auto proto = sObjectMgr->GetItemTemplate(auction->item_template);
+        if (!proto) return;
+        marketPrice = _config->pricing.buy.Price(ASConfig::PricingItem(proto), marketPrice);
+        ceilingPrice = marketPrice;
+    }
     time_t now = GameTime::GetGameTime().count();
     uint32 remainingScans = AuctionPricing::CalculateRemainingScans(auction->expire_time - now);
 
@@ -131,13 +142,22 @@ void AuctionBuyingService::ConsiderForBid(AuctionEntry* auction, BidLimits const
 
     // No sense bidding more than the item costs to buy outright elsewhere on the AH.
     uint32 ceilingPerUnit = valuation->second;
+    if (_config && _config->pricing.applyToBids && _config->pricing.buyMode != EconomyPricing::Mode::Historical)
+    {
+        auto proto = sObjectMgr->GetItemTemplate(auction->item_template);
+        if (!proto) return;
+        uint32 custom = _config->pricing.buy.Price(ASConfig::PricingItem(proto), limits.marketPerUnit);
+        ceilingPerUnit = _config->pricing.buyMode == EconomyPricing::Mode::Custom
+            ? custom : std::min(ceilingPerUnit, custom);
+    }
     if (limits.cheapestBuyoutPerUnit > 0)
     {
         ceilingPerUnit = std::min(ceilingPerUnit, limits.cheapestBuyoutPerUnit);
     }
 
     uint32 minimumBid = MinimumNextBid(auction);
-    if (!IsWithinBidCaps(auction, minimumBid, ceilingPerUnit, limits.vendorBuyPrice))
+    if (!AllowsPrice(auction, minimumBid, true) ||
+        !IsWithinBidCaps(auction, minimumBid, ceilingPerUnit, limits.vendorBuyPrice))
     {
         return;
     }
@@ -216,6 +236,9 @@ size_t AuctionBuyingService::DrainQueue()
 
 bool AuctionBuyingService::EnqueueBuyout(uint32 auctionId, AuctionHouseId houseId, time_t buyTime)
 {
+    auto house = sAuctionMgr->GetAuctionsMapByHouseId(houseId);
+    auto auction = house ? house->GetAuction(auctionId) : nullptr;
+    if (!auction || !AllowsPrice(auction, auction->buyout)) return false;
     if (!_queuedAuctionIds.insert(auctionId).second)
     {
         return false;
@@ -229,6 +252,7 @@ size_t AuctionBuyingService::ClearQueue()
     size_t dropped = _queue.size();
     _queue.clear();
     _queuedAuctionIds.clear();
+    _bidValuations.clear();
     return dropped;
 }
 
@@ -279,6 +303,9 @@ void AuctionBuyingService::BuyItem(QueuedPurchase const& entry)
         return;
     }
 
+    if (!auction->buyout || (_config && auction->owner == _bot.GetPlayerRef().GetGUID()) ||
+        !AllowsPrice(auction, auction->buyout) || !CheckBudget(auction, auction->buyout)) return;
+    RecordCommitment(auction, auction->buyout);
     auto trans = CharacterDatabase.BeginTransaction();
 
     // A player holding the high bid gets it back, as core's own buyout path does.
@@ -325,18 +352,22 @@ void AuctionBuyingService::PlaceBid(QueuedPurchase const& entry)
 
     // A rival may have bid during the delay: re-check against the current minimum.
     uint32 minimumBid = MinimumNextBid(auction);
-    if (!IsWithinBidCaps(auction, minimumBid, entry.bidCeilingPerUnit, entry.vendorBuyPrice))
+    if (!AllowsPrice(auction, minimumBid, true) ||
+        !IsWithinBidCaps(auction, minimumBid, entry.bidCeilingPerUnit, entry.vendorBuyPrice))
     {
         return;  // pushed past this bidder's limit, up to the buyout, or past the vendor price
     }
 
     // The amount a player would type; the bare minimum if the rounded one breaks a cap.
     uint32 amount = AuctionPricing::RollBidAmount(minimumBid);
-    if (!IsWithinBidCaps(auction, amount, entry.bidCeilingPerUnit, entry.vendorBuyPrice))
+    if (!AllowsPrice(auction, amount, true) ||
+        !IsWithinBidCaps(auction, amount, entry.bidCeilingPerUnit, entry.vendorBuyPrice))
     {
         amount = minimumBid;
     }
 
+    if (!CheckBudget(auction, amount)) return;
+    RecordCommitment(auction, amount);
     auto trans = CharacterDatabase.BeginTransaction();
 
     // Must run BEFORE the mutation below: it refunds the current auction->bid to
@@ -359,4 +390,43 @@ void AuctionBuyingService::PlaceBid(QueuedPurchase const& entry)
     CharacterDatabase.CommitTransaction(trans);
     // Do NOT DeleteFromDB / RemoveAItem / RemoveAuction -- core settles the auction
     // normally at expiry (seller paid, item mailed to the winner).
+}
+
+bool AuctionBuyingService::AllowsPrice(AuctionEntry const* auction, uint32 amount, bool bid) const
+{
+    if (!_config) return true; // isolated live-test services retain their original contract
+    auto const& rules = _config->pricing;
+    if (rules.buyMode == EconomyPricing::Mode::Historical || (bid && !rules.applyToBids)) return true;
+    auto proto = sObjectMgr->GetItemTemplate(auction->item_template);
+    if (!proto || !auction->itemCount || !amount || !AuctionPricing::IsBuyableQuality(proto->Quality)) return false;
+    uint32 vendor = _config->VendorBuyCap(proto);
+    if (vendor && uint64(amount) > uint64(vendor) * auction->itemCount) return false;
+    uint32 historical = 0;
+    if (auto scan = _config->FindScannedItem(auction->GetHouseId(), proto->Class, proto->Quality, proto->ItemId))
+        historical = scan->GetMarketPrice();
+    if (_config->marketMode && _marketData)
+    {
+        size_t slot = Market::FactionSlot(static_cast<uint32>(auction->GetHouseId()));
+        if (slot < Market::kFactions)
+        {
+            auto const& faction = _marketData->factions[slot];
+            int32 index = faction.FindItem(proto->ItemId);
+            historical = index >= 0 ? static_cast<uint32>(std::clamp<double>(faction.items[index].ref, 0, EconomyPricing::MaxPrice)) : 0;
+        }
+    }
+    uint32 custom = rules.buy.Price(ASConfig::PricingItem(proto), historical);
+    // The original decision paths enforce historical willingness; this exact stack
+    // comparison adds the custom cap without truncating a fractional unit price.
+    return EconomyPricing::WithinStackLimit(amount, custom, auction->itemCount);
+}
+
+bool AuctionBuyingService::CheckBudget(AuctionEntry const* auction, uint32 amount)
+{
+    return !_config || !_ledger || _ledger->CanCommit(GameTime::GetGameTime().count(), auction->Id,
+        auction->item_template, auction->itemCount, amount, _config->pricing.dailyItemLimit,
+        _config->pricing.dailyCopperBudget);
+}
+void AuctionBuyingService::RecordCommitment(AuctionEntry const* auction, uint32 amount)
+{
+    if (_ledger) _ledger->Commit(auction->Id, auction->item_template, auction->itemCount, amount);
 }

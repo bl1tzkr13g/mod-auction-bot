@@ -265,9 +265,9 @@ bool AuctionSim::ReloadMarket(std::string& note)
     }
     bool datOk = true;
     auto fresh = std::make_unique<ASConfig>(sConfigMgr->GetConfigPath() + "/modules/auctionsim.dat", datOk);
-    if (!datOk)
+    if (!datOk || !fresh->pricingConfigValid)
     {
-        note = "auctionsim.dat failed to load; nothing changed";
+        note = "auction data or pricing configuration failed to load; nothing changed";
         return false;
     }
     if (!fresh->marketMode)
@@ -284,6 +284,7 @@ bool AuctionSim::ReloadMarket(std::string& note)
     // The services hold references into marketData and config: drop the market first.
     market.reset();
     _marketPurged = false;
+    config->pricing = fresh->pricing;
     config->marketBots = fresh->marketBots;
     config->marketScale = fresh->marketScale;
     config->replayBidding = fresh->replayBidding;
@@ -332,6 +333,13 @@ bool AuctionSim::StartOrReloadBot(bool reloadConfig)
     if (reloadConfig)
     {
         config->LoadReplayBidding();
+        config->LoadPricing();
+    }
+
+    if (!config->pricingConfigValid)
+    {
+        LOG_ERROR("module", "AuctionSim: invalid pricing configuration; fix it and reload before starting the bot");
+        return false;
     }
 
     // Market mode without its tables never starts (the GM is told at login).
@@ -360,6 +368,7 @@ bool AuctionSim::StartOrReloadBot(bool reloadConfig)
     market.reset();  // holds a reference to the old buying service
     listingService = std::make_unique<AuctionListingService>(*bot, *config);
     buyingService = std::make_unique<AuctionBuyingService>(*bot);
+    buyingService->SetPricing(config.get(), &pricingLedger, marketData.get());
     buyingService->SetBiddingEnabled(config->replayBidding);
 
     if (config->marketMode)
@@ -461,7 +470,7 @@ void AuctionSim::ScanAuctions(AuctionHouseId _AuctionHouseId)
 
         ScannedItem const* scannedItem =
             config->FindScannedItem(_AuctionHouseId, proto->Class, proto->Quality, auction->item_template);
-        if (!scannedItem)
+        if (!scannedItem && config->pricing.buyMode != EconomyPricing::Mode::Custom)
         {
             continue;
         }
@@ -490,7 +499,8 @@ void AuctionSim::ScanAuctions(AuctionHouseId _AuctionHouseId)
             if (AuctionPricing::IsWithinVendorBuyPrice(pricePerItem, vendorBuyPrice))
             {
                 buyingService->ConsiderForPurchase(
-                    auction, pricePerItem, scannedItem->GetMarketPrice(), scannedItem->GetBuyCeiling());
+                    auction, pricePerItem, scannedItem ? scannedItem->GetMarketPrice() : 0,
+                    scannedItem ? scannedItem->GetBuyCeiling() : 0);
             }
         }
 
@@ -504,8 +514,8 @@ void AuctionSim::ScanAuctions(AuctionHouseId _AuctionHouseId)
         if (AuctionPricing::MayBid(config->replayBidding, playerHoldsBid, openable))
         {
             AuctionBuyingService::BidLimits limits;
-            limits.valuationLowPerUnit = scannedItem->GetBidValuationLow();
-            limits.marketPerUnit = scannedItem->GetMarketPrice();
+            limits.valuationLowPerUnit = scannedItem ? scannedItem->GetBidValuationLow() : 0;
+            limits.marketPerUnit = scannedItem ? scannedItem->GetMarketPrice() : 0;
             limits.vendorBuyPrice = vendorBuyPrice;
             auto cheapest = cheapestBuyoutPerUnit.find(auction->item_template);
             limits.cheapestBuyoutPerUnit = cheapest != cheapestBuyoutPerUnit.end() ? cheapest->second : 0;
@@ -923,4 +933,56 @@ void AddAuctionSimScripts()
     new AuctionSim();
     new AuctionSimMailManager();
     new AuctionSimMarketGuard();
+}
+
+bool AuctionSim::ReloadPricing()
+{
+    if (!config || !sConfigMgr->Reload() || !config->LoadPricing()) return false;
+    // Old queues and private valuations were calculated under different rules.
+    // Keep the daily ledger, bot identities, market state and existing auctions.
+    if (buyingService) buyingService->ClearQueue();
+    return true;
+}
+
+std::vector<std::string> AuctionSim::DescribePricing(uint32 itemId) const
+{
+    if (!config) return {"AuctionSim configuration is not loaded."};
+    auto proto = sObjectMgr->GetItemTemplate(itemId);
+    if (!proto) return {"Unknown item ID."};
+    auto const& rules = config->pricing;
+    auto item = ASConfig::PricingItem(proto);
+    std::vector<std::string> lines = {
+        Acore::StringFormat("Item {}: vendor SellPrice={} copper/unit; buy={}, sell={}", itemId,
+            proto->SellPrice, EconomyPricing::ModeName(rules.buyMode), EconomyPricing::ModeName(rules.sellMode)),
+        Acore::StringFormat("Custom buy source: {}; custom sell source: {}",
+            rules.buy.Source(item), rules.sell.Source(item))
+    };
+    for (auto house : {AuctionHouseId::Alliance, AuctionHouseId::Horde})
+    {
+        uint32 historical = 0, ceiling = 0;
+        auto scan = config->FindScannedItem(house, proto->Class, proto->Quality, itemId);
+        if (scan) { historical = scan->GetMarketPrice(); ceiling = scan->GetBuyCeiling(); }
+        if (config->marketMode && marketData)
+        {
+            auto const& faction = marketData->factions[Market::FactionSlot(static_cast<uint32>(house))];
+            int32 index = faction.FindItem(itemId);
+            historical = index >= 0 ? static_cast<uint32>(std::clamp<double>(faction.items[index].ref, 0, EconomyPricing::MaxPrice)) : 0;
+            // Market reservations range up to (but below) five times the reference.
+            ceiling = static_cast<uint32>(std::min<uint64>(uint64(historical) * 5, EconomyPricing::MaxPrice));
+        }
+        uint32 custom = rules.buy.Price(item, historical);
+        uint32 buy = rules.buyMode == EconomyPricing::Mode::Custom ? custom
+            : rules.buyMode == EconomyPricing::Mode::Hybrid ? std::min(custom, ceiling) : ceiling;
+        if (!AuctionPricing::IsBuyableQuality(proto->Quality)) buy = 0;
+        uint32 vendor = config->VendorBuyCap(proto);
+        if (vendor) buy = std::min(buy, vendor);
+        lines.push_back(Acore::StringFormat("House {}: historical reference={}, custom buy cap={}, "
+            "maximum buy ceiling={}, sell baseline={} copper/unit (0=unpriced/skip)",
+            static_cast<uint32>(house), historical, custom, buy, rules.SellPrice(item, historical)));
+    }
+    lines.push_back(Acore::StringFormat("Daily quantity limit={}, daily budget={} gold (0=unlimited); custom bid protection={}",
+        rules.dailyItemLimit, rules.dailyCopperBudget / 10000, rules.applyToBids));
+    lines.push_back("Historical willingness and listing variation are dynamic; grey items are never bought. "
+        "Prices above are per unit before variation; stack totals are checked at execution.");
+    return lines;
 }

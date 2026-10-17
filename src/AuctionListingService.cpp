@@ -132,7 +132,8 @@ void AuctionListingService::ListNewAuctions(
                     continue;
                 }
 
-                if (!AuctionPricing::IsListablePrice(scan.GetMarketPrice()))
+                if (_config.pricing.sellMode == EconomyPricing::Mode::Historical &&
+                    !AuctionPricing::IsListablePrice(scan.GetMarketPrice()))
                 {
                     dropWeight(idx);
                     continue;
@@ -180,14 +181,31 @@ AuctionEntry* AuctionListingService::ListOneItem(
 
     uint32 quantity = AuctionPricing::RollStackSize(
         scan.GetTypicalStackSize(), scan.GetStackLow(), scan.GetStackHigh(), proto->GetMaxStackSize());
-    uint32 buyout = AuctionPricing::RollBuyoutPrice(
-        scan.GetListLow(), scan.GetMarketPrice(), scan.GetListHigh(), quantity, scan.GetSampleCount());
+    uint32 buyout;
+    if (_config.pricing.sellMode != EconomyPricing::Mode::Historical)
+    {
+        uint32 unit = _config.pricing.SellPrice(ASConfig::PricingItem(proto), scan.GetMarketPrice(), frand(-1.0f, 1.0f));
+        buyout = EconomyPricing::StackPrice(unit, quantity);
+    }
+    else
+    {
+        buyout = AuctionPricing::RollBuyoutPrice(
+            scan.GetListLow(), scan.GetMarketPrice(), scan.GetListHigh(), quantity, scan.GetSampleCount());
+    }
+    if (!buyout) return nullptr;
     // Realistic starting bid: a fraction of this listing's buyout, rolled from the
     // observed MINBID/BUYOUT distribution for the item (basis points).
     uint32 startbid = AuctionPricing::RollStartBid(
         buyout, scan.GetBidRatioLowBp(), scan.GetBidRatioTypicalBp(), scan.GetBidRatioHighBp(),
         scan.GetBidRatioSampleCount());
 
+    if (_config.pricing.sellMode != EconomyPricing::Mode::Historical)
+    {
+        EconomyPricing::Rules floor;
+        floor.multiplier = _config.pricing.minimumVendorMultiplier;
+        uint32 minimumBid = EconomyPricing::StackPrice(floor.Price(ASConfig::PricingItem(proto), 0), quantity);
+        startbid = std::max(startbid, std::min(buyout, minimumBid));
+    }
     // The item only ever lives in the auction house, never in the bot's inventory or
     // item-update queue -- otherwise Player::_SaveInventory trips over it (bag 255 /
     // slot 0) once the bot character is also logged in. Create it ownerless, stamp the

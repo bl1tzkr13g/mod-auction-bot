@@ -33,6 +33,8 @@ public:
     // Market step. Backs the timer, ".auctionsim scan" and the addon's Scan button.
     void RunScan();
     void DeleteAuctions();
+    bool ReloadPricing();
+    std::vector<std::string> DescribePricing(uint32 itemId) const;
     uint32 CleanOverCapAuctions();
     std::vector<AuctionSimTests::TestResult> RunTests();
     std::vector<AuctionBuyingService::QueuedPurchase> const& GetBuyQueue() const { return buyingService->GetQueue(); }
@@ -173,6 +175,7 @@ private:
     std::unique_ptr<AuctionBuyingService> buyingService;
     Market::BotRoster marketRoster;
     std::unique_ptr<Market::Data> marketData;
+    EconomyPricing::DailyLedger pricingLedger;
     std::unique_ptr<MarketService> market;
     uint32 scanTimer = 0;
 

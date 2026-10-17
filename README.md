@@ -233,3 +233,108 @@ This window.
 
 
 <img src="images/addon.png">
+
+## Configurable buying and selling prices
+
+The initial custom price list is calculated at runtime as **3 ×
+`item_template.SellPrice` per item** (the copper a vendor pays a player). Stack
+buyouts multiply the unit price by stack size. This does not use `BuyPrice`.
+No item data file needs editing: your server's item templates supply the baseline.
+
+`AuctionSim.Pricing.SellMode = CUSTOM` enables those listing prices;
+`HISTORICAL` restores the existing historical listing behavior.
+`AuctionSim.Pricing.BuyMode = CUSTOM` (the default) values purchases using your
+custom rules. `HYBRID` retains historical buying decisions with a custom ceiling, and
+`HISTORICAL` retains existing buying prices. These options work in both Replay
+and Market simulation modes. Market mode still uses learned demand/arrival rates
+and listing selection; custom pricing changes prices, not which goods are stocked.
+The original vendor-stocked-item buying safeguard and grey-item exclusion remain.
+
+Change `AuctionSim.Pricing.Buy.Default` to adjust what bots pay players, or
+`AuctionSim.Pricing.Sell.Default` to adjust what bots charge for their own auctions.
+Both default to 3.0. Items without individual overrides inherit these multipliers
+unless an optional category rule applies. Independent overrides follow this priority order:
+fixed item price, item multiplier, subclass multiplier, class multiplier, default.
+For example, to list Deviate Fish for 1 gold each while leaving all other items at
+3× vendor value:
+
+```ini
+AuctionSim.Pricing.Sell.FixedPrices = "6522:10000"
+```
+
+The distributed configuration also includes 94 annotated starter items: cloth,
+ore/stone, herbs, leather, enchanting dusts/shards, healing/mana potions and useful
+fish. Each has an editable buying cap and listing price, in copper per item:
+
+```ini
+# Linen Cloth: bots pay players up to 1s, and list their own cloth for 1s50c each.
+AuctionSim.Pricing.Buy.FixedPrice.2589 = 100
+AuctionSim.Pricing.Sell.FixedPrice.2589 = 150
+```
+
+These are suggested small-server economy prices, not historical price estimates.
+Most materials use 3× vendor value for buying and 4× for selling, with modest
+minimums; cloth/fishing premiums and enchanting items without vendor values have
+hand-set prices. Every item is named and annotated in the conf. Existing active
+configs do not automatically acquire these rows: copy the desired starter rows
+from the updated `.conf.dist` and reload. Set an item's two `FixedPrice.<ID>`
+values to `DEFAULT` to restore multiplier pricing (zero-vendor items then follow
+their configured fallback).
+Changing the global multiplier does not change fixed starter prices. The compact
+`FixedPrices` list takes priority over matching `FixedPrice.<ID>` rows, so the
+Deviate Fish example above overrides its starter price. Existing vendor-stock
+buying safeguards still apply, and price overrides do not add new items to stock.
+
+Use comma-separated entries for multiple items. `Sell.ItemOverrides` accepts
+`ItemID:Multiplier` instead. The optional class keys and numeric subclass format
+are documented in `conf/auctionsim.conf.dist`. Multipliers must be finite and
+nonnegative; duplicate item rules or malformed entries reject the entire reload.
+Invalid pricing at startup prevents the bot from starting until corrected.
+Fixed zero disables an item on the corresponding custom side. Items with zero
+vendor sell value are skipped unless a fixed price or `ZeroVendorPolicy = HISTORICAL`
+is configured. Custom sell variation defaults to zero for exact initial prices;
+the default custom buyout floor is one times vendor sell value. Historical modes
+bypass custom price overrides and variation.
+
+After compiling this module into AzerothCore once, copy the pricing settings into
+your active `auctionsim.conf` (schema version 4), then use:
+
+```text
+.auctionsim pricing reload
+.auctionsim pricing show 6522
+```
+
+Omit the leading dot in the server console. Reload applies pricing only, retains
+bot characters and existing auction listings, and clears pending purchases so
+old decisions cannot execute under the new settings. Newly created auctions use
+new sell settings; it does not reprice existing listings. Inspection reports
+per-faction references and custom baselines; historical valuations, listing
+variation, and the original bidding behavior may produce different actual prices.
+Changing Replay/Market simulation mode still requires a restart.
+
+Optional daily limits count item **quantity**, not stacks, across both houses.
+They are checked when purchases execute. Bids conservatively reserve their full
+commitment, with quantity counted once and later increases charged incrementally.
+Reservations are not refunded after outbids/expiry. Limits reset at UTC midnight
+and on worldserver restart; pricing reloads retain them. They are disabled by
+default and are not a durable accounting ledger.
+
+The module requires an AzerothCore checkout to compile and live server/database
+fixtures to run `.auctionsim test`. The independent economy regression suite runs
+without a server:
+
+```sh
+g++ -std=c++20 -Wall -Wextra -Werror -Itools/market_parity/stubs -Isrc \
+  tools/pricing_tests.cpp src/EconomyPricing.cpp -o /tmp/auctionsim-pricing-tests
+/tmp/auctionsim-pricing-tests
+```
+
+The Market buyer integration check uses the existing Market harness stubs and
+requires fmt headers (the same dependency as `tools/market_parity`):
+
+```sh
+g++ -std=c++20 -Itools/market_parity/stubs -Isrc \
+  tools/pricing_market_tests.cpp src/MarketData.cpp src/MarketEngine.cpp \
+  -o /tmp/auctionsim-market-pricing-tests
+/tmp/auctionsim-market-pricing-tests
+```

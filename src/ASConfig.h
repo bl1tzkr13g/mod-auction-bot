@@ -9,6 +9,7 @@
 #include <vector>
 #include "AuctionHouseMgr.h"
 #include "AuctionPricing.h"
+#include "EconomyPricing.h"
 #include "ItemTemplate.h"
 #include "ScannedItem.h"
 
@@ -46,6 +47,14 @@ public:
     // AuctionSim.Replay.Bidding (experimental): false stops the Replay bot bidding --
     // no opening bids, no outbids, queued bids dropped. Buyouts are unaffected.
     bool replayBidding = true;
+
+    EconomyPricing::Settings pricing;
+    bool LoadPricing();
+    bool pricingConfigValid = true;
+    static EconomyPricing::Item PricingItem(ItemTemplate const* proto)
+    {
+        return {proto->ItemId, proto->Class, proto->SubClass, proto->SellPrice};
+    }
 
     // The value of AuctionSim.Replay.Bidding as read from the conf: empty (missing key)
     // -> true, "1"/"true"/"yes" -> true, "0"/"false"/"no" -> false (any case). False

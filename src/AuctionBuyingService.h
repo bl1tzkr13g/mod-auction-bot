@@ -6,9 +6,12 @@
 #include <vector>
 #include "AuctionHouseMgr.h"
 #include "AuctionPricing.h"
+#include "EconomyPricing.h"
 #include "DatabaseEnvFwd.h"
 
 class Bot;
+class ASConfig;
+namespace Market { class Data; }
 
 // Owns the "buy" side of the bot: candidates found during a scan are queued,
 // then executed a few at a time as their rolled buy time comes due. A queued
@@ -44,6 +47,10 @@ public:
     };
 
     explicit AuctionBuyingService(Bot& bot);
+    void SetPricing(ASConfig const* config, EconomyPricing::DailyLedger* ledger, Market::Data const* data = nullptr)
+    { _config = config; _ledger = ledger; _marketData = data; }
+    ASConfig const* PricingConfig() const { return _config; }
+    bool AllowsPrice(AuctionEntry const* auction, uint32 amount, bool bid = false) const;
 
     // Rolls a fresh buy-tolerance profile for the upcoming scan pass. Call once
     // per ScanAuctions() invocation, before any ConsiderForPurchase() calls.
@@ -122,6 +129,11 @@ private:
     void PlaceBid(QueuedPurchase const& entry);
 
     Bot& _bot;
+    ASConfig const* _config = nullptr;
+    Market::Data const* _marketData = nullptr;
+    EconomyPricing::DailyLedger* _ledger = nullptr;
+    bool CheckBudget(AuctionEntry const* auction, uint32 amount);
+    void RecordCommitment(AuctionEntry const* auction, uint32 amount);
     AuctionPricing::BuyTolerance _tolerance{};
     std::vector<QueuedPurchase> _queue;
     std::unordered_set<uint32> _queuedAuctionIds;

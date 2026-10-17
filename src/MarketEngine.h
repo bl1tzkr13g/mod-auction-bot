@@ -74,8 +74,10 @@ namespace Market
         // Buyers per the contract's step 2: arrivals ~ Poisson(buyersH x demandScale x
         // scale x weekday multiplier x dt) per item, each taking the cheapest buyable
         // listing at or under its reservation. Appends the chosen listings' indices
-        // (into Listings()) to `out` and returns how many buyers arrived.
-        uint32 PlanBuys(Faction const& fac, double scaleTimesDt, size_t weekday, Rng& rng, std::vector<uint32>& out);
+        // (into Listings()) to `out` and returns how many buyers arrived. Optional
+        // priceReferences replaces per-item valuation without changing demand rates.
+        uint32 PlanBuys(Faction const& fac, double scaleTimesDt, size_t weekday, Rng& rng, std::vector<uint32>& out,
+            std::vector<uint32> const* priceReferences = nullptr);
 
         // The house's per-item state, for the self-tests.
         size_t ItemCount() const { return _state.size(); }
