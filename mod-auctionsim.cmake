@@ -1,6 +1,6 @@
-set(AUCTIONSIM_DAT "${CMAKE_CURRENT_SOURCE_DIR}/mod-auctionsim/data/auctionsim.dat")
+set(AUCTIONSIM_DAT "${CMAKE_CURRENT_LIST_DIR}/data/auctionsim.dat")
 # Market mode's tables (ml/s6_export.py). Optional: Replay mode runs without it.
-set(AUCTIONSIM_MARKET_DAT "${CMAKE_CURRENT_SOURCE_DIR}/mod-auctionsim/data/auctionsim_market.dat")
+set(AUCTIONSIM_MARKET_DAT "${CMAKE_CURRENT_LIST_DIR}/data/auctionsim_market.dat")
 
 if(WIN32)
   add_custom_command(TARGET modules POST_BUILD

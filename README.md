@@ -16,12 +16,13 @@ Every 30 minutes (fixed, not configurable), AuctionSim scans both auction houses
 
 1. From your AzerothCore `modules` directory:
    ```
-   git clone https://github.com/Moloch17/mod-auctionsim.git
+   git clone https://github.com/bl1tzkr13g/mod-auction-bot.git
    ```
 2. Rebuild AzerothCore.
 3. Copy `interface_addon/ahsim` into your game's `Interface/AddOns` directory (see below). The module and addon ship as a pair: after updating one, update the other too, or a GM gets a version-mismatch notice.
 
 **Notes:**
+- Use `modules/mod-auction-bot` for this fork. The original `mod-auctionsim` directory name is also supported; install only one copy. After updating an existing checkout, rerun CMake configuration before rebuilding so its module loader and data-copy rules are refreshed.
 - If you've previously used ah-bot or ah-bot-plus, there's no conflict, but the two cannot run at the same time -- disable other auction house bot modules before enabling this one.
 - Not intended for use with combined auction house enabled.
 - AuctionSim is disabled by default.
